@@ -329,5 +329,93 @@
     };
     run().catch(handleError);
   </script>
+    <script>
+  /*
+    Improved version: waits until the project has actually started running
+    before monitoring for stop state.
+  */
+
+  function waitForRuntime() {
+    if (window.vm && window.vm.runtime) {
+      console.log("✅ TurboWarp runtime found.");
+      waitForProjectStart();
+    } else {
+      console.log("⏳ Waiting for TurboWarp runtime...");
+      setTimeout(waitForRuntime, 500);
+    }
+  }
+
+  function waitForProjectStart() {
+    const runtime = window.vm.runtime;
+    console.log("⏳ Waiting for project to start running...");
+
+    const startCheck = setInterval(() => {
+      const threads = runtime.threads || [];
+      const isRunning = threads.length > 0;
+
+      if (isRunning) {
+        clearInterval(startCheck);
+        console.log("🎬 Project has started — monitoring for stop...");
+        monitorStop(runtime);
+      }
+    }, 500);
+  }
+
+  function monitorStop(runtime) {
+    console.log("👀 Monitoring project activity...");
+
+    let idleTicks = 0; // counts how long it's been idle
+    const interval = setInterval(() => {
+      const runningThreads = (runtime.threads && runtime.threads.length) || 0;
+
+      if (runningThreads === 0) {
+        idleTicks++;
+      } else {
+        idleTicks = 0; // reset if activity resumes
+      }
+
+      // If no running threads for ~3 seconds, assume project stopped
+      if (idleTicks >= 3) {
+        clearInterval(interval);
+        console.log("🛑 Project stopped — sending exit signal.");
+
+        if (window.AppInventor) {
+          console.log("📤 Sending 'exit' to App Inventor");
+          window.AppInventor.setWebViewString("exit");
+          return;
+        }
+
+        try {
+          window.close();
+          console.log("🪟 Attempted to close window.");
+        } catch (e) {
+          console.warn("⚠️ Cannot close window automatically:", e);
+        }
+
+        if (!window.closed) {
+          document.body.innerHTML = `
+            <div style="
+              display:flex;
+              flex-direction:column;
+              justify-content:center;
+              align-items:center;
+              height:100vh;
+              text-align:center;
+              font-family:sans-serif;
+              font-size:18px;
+              color:#333;
+            ">
+              <p>🎮 Game Over!</p>
+              <p>You can now close the app manually.</p>
+            </div>
+          `;
+        }
+      }
+    }, 1000);
+  }
+
+  // Start process
+  waitForRuntime();
+  </script>
 </body>
 </html>
